@@ -1,0 +1,8 @@
+cachetools
+aiohttp
+aiolimiter
+numpy
+python-dotenv
+python-telegram-bot==22.3
+supabase
+httpx
