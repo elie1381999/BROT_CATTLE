@@ -3,12 +3,12 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ContextTypes
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-# Load .env variables
+# Load environment variables from .env file
 load_dotenv()
 
-# Now read from env
+# Environment variables
 SECRET_KEY = os.getenv("SUPABASE_JWT_SECRET")
 FLUTTER_WEB_URL = os.getenv("FLUTTER_WEB_URL")
 
@@ -19,11 +19,16 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     telegram_id = user.id
-    
+    now = datetime.utcnow().replace(tzinfo=timezone.utc)
+    # Set token expiry to 1 hour for better usability
+    exp = now + timedelta(hours=1)
+
     payload = {
         "sub": str(telegram_id),
         "role": "authenticated",
-        "exp": datetime.utcnow() + timedelta(minutes=5),
+        "exp": int(exp.timestamp()),
+        "iat": int(now.timestamp()),
+        "nbf": int(now.timestamp()),
         "aud": "authenticated",
         "telegram_id": telegram_id
     }
