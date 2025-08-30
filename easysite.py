@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 # Now read from env
-SECRET_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SECRET_KEY = os.getenv("SUPABASE_JWT_SECRET")
 FLUTTER_WEB_URL = os.getenv("FLUTTER_WEB_URL")
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
