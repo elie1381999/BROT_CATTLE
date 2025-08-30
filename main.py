@@ -7,6 +7,7 @@ import types
 import inspect
 from dotenv import load_dotenv
 from urllib.parse import unquote
+from easysite import menu as easysite_menu
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -281,6 +282,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Profile": profile_handlers,
         "👥 Roles": role_handlers,
         "Roles": role_handlers,
+        "🌐 Easy Site": {"menu": easysite_menu},   # 👈 Added
     }
     if text in reply_map:
         await _dispatch_menu(reply_map[text], update, context)
@@ -480,6 +482,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "aiask": aiask_handlers,
         "feed": feed_handlers,
         "payment": paymentcentral,
+        "easysite": {"menu": easysite_menu},   # 👈 Added
     }
     handlers = routers.get(prefix)
     if not handlers:
@@ -690,3 +693,4 @@ if __name__ == "__main__":
 
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
+
