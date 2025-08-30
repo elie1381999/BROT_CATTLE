@@ -3,7 +3,8 @@ from telegram.ext import ContextTypes
 import jwt
 import time
 
-SECRET_KEY = "M17byWm43SFabxTkgLxv03ycSDVuC+QN0annqmuvLN/+DKSHiCFYeTnF9dPIkJYXVY3xXtS/AhS6zDo5J0haHA=="  # keep this private
+# Secret used to sign JWTs (keep private on your bot server)
+SECRET_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpanBha2p6aWxxZXFnY2prcGRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU4NjgxNjMsImV4cCI6MjA3MTQ0NDE2M30.PWk4rP0eKC9uV7w6E3y25pEzY6zzHSWKEnRyXMpdcNs"
 FLUTTER_WEB_URL = "https://brotcattle.loca.lt"
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -15,8 +16,9 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = user.id
     payload = {
         "telegram_id": telegram_id,
-        "exp": int(time.time()) + 3600  # 1 hour expiry
+        "exp": int(time.time()) + 3600  # JWT valid for 1 hour
     }
+
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
     url = f"{FLUTTER_WEB_URL}/?token={token}"
 
