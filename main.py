@@ -6,8 +6,9 @@ import logging
 import types
 import inspect
 from dotenv import load_dotenv
+from urllib.parse import unquote
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import PlainTextResponse
 
 # Telegram imports
@@ -63,6 +64,8 @@ load_dotenv()
 
 # Environment
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# Optional secret path — prefer using this for production. If set, webhook must use this secret.
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "").strip() or None
 DEBUG_CALLBACK = os.getenv("DEBUG_CALLBACK", "0") == "1"
 
 # Basic logging
@@ -604,6 +607,69 @@ async def shutdown_event():
             logger.info("Telegram application stopped and shutdown completed")
         except Exception:
             logger.exception("Exception while stopping telegram app")
+
+
+# ------------------------
+# Webhook endpoint (accepts percent-encoded path segments)
+# ------------------------
+@app.post("/webhook/{rest_of_path:path}")
+async def telegram_webhook(rest_of_path: str, request: Request):
+    """
+    Accepts incoming Telegram updates at /webhook/<path>.
+    If WEBHOOK_SECRET is set in env, the path must match that secret.
+    Otherwise the last path segment is decoded and matched against the full bot token.
+    This accepts encoded tokens (e.g. %3A).
+    """
+    # determine the expected secret
+    expected = WEBHOOK_SECRET if WEBHOOK_SECRET else TOKEN
+
+    # decode last segment (handles %3A)
+    token_in_path = unquote(rest_of_path).split("/")[-1]
+
+    logger.info("Incoming webhook POST path last-segment=%s", token_in_path)
+
+    if expected is None:
+        logger.error("No expected webhook secret/token configured")
+        raise HTTPException(status_code=500, detail="Server misconfigured")
+
+    if token_in_path != expected:
+        logger.warning("Forbidden webhook call (path token mismatch). Received '%s'", token_in_path)
+        raise HTTPException(status_code=403, detail="Forbidden (invalid webhook token)")
+
+    # read JSON body
+    try:
+        data = await request.json()
+    except Exception:
+        logger.exception("Failed to read JSON body from webhook request")
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # log for debugging
+    logger.info("Webhook received update keys: %s", list(data.keys()))
+
+    # ensure telegram_app ready
+    if telegram_app is None:
+        logger.error("telegram_app is not initialized yet")
+        raise HTTPException(status_code=503, detail="Bot not initialized")
+
+    # convert to Update and process
+    try:
+        try:
+            update = Update.de_json(data, telegram_app.bot)
+        except Exception:
+            update = Update(**data)
+    except Exception:
+        logger.exception("Failed to build Update object from JSON")
+        raise HTTPException(status_code=400, detail="Bad update payload")
+
+    try:
+        # process the update using the running application
+        await telegram_app.process_update(update)
+    except Exception:
+        logger.exception("Exception while processing webhook update")
+        # return 200 to avoid endless Telegram retries; logs will reveal the error
+        return {"ok": False}
+
+    return {"ok": True}
 
 
 # A lightweight health endpoint for Render / load balancers
