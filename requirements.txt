@@ -7,4 +7,5 @@ python-telegram-bot==22.3
 supabase
 httpx
 uvicorn
+fastapi
 
