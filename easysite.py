@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 import jwt
 import time
 
-SECRET_KEY = "123456789078821019ebs"  # keep this private
+SECRET_KEY = "M17byWm43SFabxTkgLxv03ycSDVuC+QN0annqmuvLN/+DKSHiCFYeTnF9dPIkJYXVY3xXtS/AhS6zDo5J0haHA=="  # keep this private
 FLUTTER_WEB_URL = "https://brotcattle.loca.lt"
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
