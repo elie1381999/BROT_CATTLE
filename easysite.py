@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 # Change this to your actual Flutter web app URL (deployed link)
-FLUTTER_WEB_URL = "https://your-flutter-app-url.web.app"
+FLUTTER_WEB_URL = "https://brotcattle.loca.lt"
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
