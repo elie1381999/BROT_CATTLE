@@ -4,7 +4,7 @@ import jwt
 import time
 
 # Secret used to sign JWTs (keep private on your bot server)
-SECRET_KEY = "M17byWm43SFabxTkgLxv03ycSDVuC+QN0annqmuvLN/+DKSHiCFYeTnF9dPIkJYXVY3xXtS/AhS6zDo5J0haHA=="
+SECRET_KEY = "41a414e7-0158-4c6a-8fc3-aff4877910ff"
 FLUTTER_WEB_URL = "https://brotcattle.loca.lt"
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
