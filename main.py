@@ -26,9 +26,9 @@ from telegram.error import NetworkError
 import paymentcentral
 from aboutfeedformula import feed_handlers  # new feed formula handlers
 
+# optional: nest_asyncio may be present for interactive envs; harmless here
 try:
     import nest_asyncio
-
     nest_asyncio.apply()
 except Exception:
     pass
@@ -43,7 +43,7 @@ from aboutrole import role_handlers
 from aboutbreeding import breeding_handlers
 from aboutinventory import inventory_handlers
 
-# AI connection (same fallbacks as before)
+# AI connection (safe fallback — AI disabled if not installed)
 try:
     from aiconnection import aiask_handlers, ask_gpt
     logging.getLogger(__name__).info("Loaded aiconnection package exports: aiask_handlers, ask_gpt")
@@ -52,7 +52,7 @@ except Exception:
         from aiconnection.aiask import aiask_handlers
         from aiconnection.aicentral import ask_gpt
         logging.getLogger(__name__).info("Loaded aiconnection submodules: aiask, aicentral")
-    except Exception as e:
+    except Exception:
         logging.getLogger(__name__).exception("Failed to import aiconnection — AI Ask disabled for now.")
         aiask_handlers = {}
         ask_gpt = None
@@ -74,9 +74,8 @@ logger = logging.getLogger(__name__)
 # FastAPI app (exposed to Render)
 app = FastAPI(title="FarmBot web health & bot host")
 
-# Will hold the running Telegram Application and background task
+# Will hold the running Telegram Application reference
 telegram_app: Application | None = None
-_bot_task: asyncio.Task | None = None
 
 
 def _clear_flow_keys(context_user_data: dict):
@@ -560,18 +559,17 @@ def build_telegram_app() -> Application:
         except Exception:
             logger.exception("Failed to set bot commands")
 
-    # schedule the set_commands coroutine on startup (Application will call this)
     app.post_init = lambda _: asyncio.create_task(set_commands())
 
     return app
 
 
 # ------------------------
-# FastAPI startup/shutdown events to host the bot
+# FastAPI startup/shutdown events to host the bot (non-blocking)
 # ------------------------
 @app.on_event("startup")
 async def startup_event():
-    global telegram_app, _bot_task
+    global telegram_app
 
     if not TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN not set. Bot will not start.")
@@ -580,33 +578,30 @@ async def startup_event():
     logger.info("FastAPI startup — building telegram app")
     telegram_app = build_telegram_app()
 
-    # run polling in the background as a task (non-blocking for FastAPI)
-    logger.info("Starting Telegram polling in background task")
-    _bot_task = asyncio.create_task(telegram_app.run_polling())
-
-    # small sleep to let the bot try to start and log anything early
-    await asyncio.sleep(0.1)
+    try:
+        logger.info("Initializing Telegram application...")
+        # initialize prepares internal resources but does not run a new loop
+        await telegram_app.initialize()
+        logger.info("Starting Telegram application...")
+        # start schedules background tasks on the current loop
+        await telegram_app.start()
+        logger.info("Telegram application initialized and started")
+    except Exception:
+        logger.exception("Failed to initialize/start Telegram application")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    global telegram_app, _bot_task
+    global telegram_app
     logger.info("FastAPI shutdown — stopping Telegram bot")
-
-    if _bot_task:
-        _bot_task.cancel()
-        try:
-            await _bot_task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception("Exception while waiting for bot task cancellation")
 
     if telegram_app:
         try:
-            # stop() and shutdown() to allow graceful cleanup
+            logger.info("Stopping Telegram application...")
             await telegram_app.stop()
+            logger.info("Shutting down Telegram application...")
             await telegram_app.shutdown()
+            logger.info("Telegram application stopped and shutdown completed")
         except Exception:
             logger.exception("Exception while stopping telegram app")
 
@@ -619,8 +614,8 @@ async def root():
 # Optional: a simple health endpoint that checks bot status
 @app.get("/health", response_class=PlainTextResponse)
 async def health():
-    bot_running = _bot_task is not None and not _bot_task.done()
-    return f"ok\nbot_running={bot_running}\n"
+    bot_running = telegram_app is not None
+    return f"ok\nbot_present={bot_running}\n"
 
 
 # Allow running locally with uvicorn for dev:
