@@ -1,7 +1,9 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+import jwt
+import time
 
-# Change this to your actual Flutter web app URL (deployed link)
+SECRET_KEY = "123456789078821019ebs"  # keep this private
 FLUTTER_WEB_URL = "https://brotcattle.loca.lt"
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -11,7 +13,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     telegram_id = user.id
-    url = f"{FLUTTER_WEB_URL}/?id={telegram_id}"
+    payload = {
+        "telegram_id": telegram_id,
+        "exp": int(time.time()) + 3600  # 1 hour expiry
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    url = f"{FLUTTER_WEB_URL}/?token={token}"
 
     text = (
         "🌐 *Easy Site Access*\n\n"
