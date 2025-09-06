@@ -75,6 +75,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Attempt to import promo helper (best-effort)
+try:
+    from promo_helper import apply_promo_for_user
+except Exception:
+    apply_promo_for_user = None
+    logger.warning("promo_helper.apply_promo_for_user not available; promo link tracking will be disabled until imported.")
+
+
 # FastAPI app (exposed to Render)
 app = FastAPI(title="FarmBot web health & bot host")
 
@@ -171,6 +179,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     telegram_id = user.id
 
+    # --- extract start param early (supports /start <arg> and message text with arg) ---
+    start_param = None
+    try:
+        if context and getattr(context, "args", None):
+            if len(context.args) > 0:
+                start_param = context.args[0]
+        if not start_param and update.message and update.message.text:
+            parts = (update.message.text or "").split()
+            if len(parts) > 1:
+                start_param = parts[1]
+    except Exception:
+        start_param = None
+
+    promo_code = None
+    if start_param and isinstance(start_param, str) and start_param.startswith("promo_"):
+        promo_code = start_param.split("_", 1)[1]
+    # --- end extraction ---
+
     try:
         user_row = await async_get_user_by_telegram(telegram_id)
     except Exception:
@@ -180,6 +206,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not user_row:
+        # preserve promo for post-registration application
+        if promo_code:
+            context.user_data["promo_code"] = promo_code
+
         context.user_data["register_flow"] = "name"
         await update.message.reply_text(
             "👋 Welcome to FarmBot!\n\n"
@@ -188,6 +218,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
         )
         return
+
+    # Registered user: if there's a promo code, apply it immediately (best-effort)
+    if promo_code:
+        if apply_promo_for_user:
+            try:
+                await apply_promo_for_user(telegram_id, promo_code, existing_user=True)
+                try:
+                    # Inform the user (non-blocking)
+                    if update.message:
+                        await update.message.reply_text("✅ Promo applied — the referring partner will be notified.")
+                except Exception:
+                    pass
+            except Exception:
+                logger.exception("Promo handling in /start failed (non-fatal)")
+        else:
+            logger.warning("apply_promo_for_user not configured; skipping promo apply")
 
     reply_keyboard = get_side_reply_keyboard()
     await update.message.reply_text(
@@ -311,11 +357,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if result.get("error"):
                 await message.reply_text("⚠️ Failed to register. Try again later.")
             else:
+                # registration success path
                 context.user_data.pop("register_flow", None)
                 context.user_data.pop("register_name", None)
-                await message.reply_text(
-                    f"✅ Registered successfully, {name}!\nYour farm '{farm_name}' is set up."
-                )
+
+                # apply promo if present in context.user_data (preserve and then pop)
+                promo_code = context.user_data.pop("promo_code", None)
+                if promo_code and apply_promo_for_user:
+                    try:
+                        await apply_promo_for_user(telegram_id, promo_code, existing_user=False)
+                        # inform user (optional)
+                        await message.reply_text(f"✅ Registered successfully, {name}!\nPromo applied.")
+                    except Exception:
+                        logger.exception("Failed to apply promo after registration (non-fatal)")
+                        await message.reply_text(f"✅ Registered successfully, {name}!\n(But we couldn't apply promo — it will be retried)")
+                else:
+                    await message.reply_text(f"✅ Registered successfully, {name}!")
+
                 await message.reply_text("To open the main menu, please press /start.")
         except Exception:
             logger.exception("Failed to register user telegram_id=%s", telegram_id)
@@ -693,4 +751,3 @@ if __name__ == "__main__":
 
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
-
